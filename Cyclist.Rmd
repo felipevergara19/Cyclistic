@@ -1,0 +1,379 @@
+---
+title: "Cyclist"
+author: "Felipe Vergara"
+date: "2023-08-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cran.rstudio.com"))
+library(knitr)
+```
+
+# Informe R Cyclist
+
+### Instalar paquetes
+
+```{r}
+install.packages("tidyverse", repos = "https://cran.rstudio.com/")
+install.packages("lubridate", repos = "https://cran.rstudio.com/")
+install.packages("ggplot2", repos = "https://cran.rstudio.com/")
+install.packages("scales", repos = "https://cran.rstudio.com/")
+
+```
+
+### Cargar librerias
+
+```{r}
+library(scales)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(geosphere)
+```
+
+## Importación de datos
+
+### Lectura y combinación de archivos CSV
+
+```{r}
+setwd("C:/Users/felip/OneDrive/Documentos/R/Cyclistic/")
+current_directory <- getwd()
+print(current_directory)
+
+file_names <- c("202306-divvy-tripdata.csv","202305-divvy-tripdata.csv","202304-divvy-tripdata.csv","202303-divvy-tripdata.csv",
+                "202302-divvy-tripdata.csv","202301-divvy-tripdata.csv","202212-divvy-tripdata.csv","202211-divvy-tripdata.csv",
+                "202210-divvy-tripdata.csv","202209-divvy-tripdata.csv","202208-divvy-tripdata.csv","202207-divvy-tripdata.csv"
+                )
+
+combined_data <-data.frame()
+
+for (file in file_names) {
+  file_data <- read_csv(file)
+  combined_data<- rbind(combined_data,file_data)
+}
+write.csv(combined_data,"C:/Users/felip/OneDrive/Documentos/R/Cyclistic/Total_Cycling_data.csv", row.names = FALSE)
+```
+
+### LLamar el documento y guardarlo en una variable
+
+```{r}
+Total_data <- read_csv("C:/Users/felip/OneDrive/Documentos/R/Cyclistic/Total_Cycling_data.csv")
+```
+
+## Limpieza de datos
+
+### Liempieza de datos y almacenar en una nueva variable
+
+```{r}
+clean_Total_data<- Total_data %>% 
+  na.omit() %>% 
+  unique() %>% 
+  mutate(across(everything(), ~trimws(.))) %>% 
+  mutate(
+    start_lat = round(as.numeric(start_lat), 2),
+    start_lng = round(as.numeric(start_lng), 2),
+    end_lat = round(as.numeric(end_lat), 2),
+    end_lng = round(as.numeric(end_lng), 2)
+  )
+```
+
+### Calculo distancia total
+
+```{r}
+clean_Total_data$distancia_total <- distVincentySphere(
+  p1 = cbind(clean_Total_data$start_lng, clean_Total_data$start_lat),
+  p2 = cbind(clean_Total_data$end_lng, clean_Total_data$end_lat)
+)
+```
+
+### Calculo tiempo de uso
+
+```{r}
+clean_Total_data$started_at <- ymd_hms(clean_Total_data$started_at)
+clean_Total_data$ended_at <- ymd_hms(clean_Total_data$ended_at)
+clean_Total_data$tiempo_de_uso <- difftime(clean_Total_data$ended_at, clean_Total_data$started_at, units = "secs")
+clean_Total_data$tiempo_formateado <- seconds_to_period(clean_Total_data$tiempo_de_uso)
+clean_Total_data$dia_numero <- wday(clean_Total_data$started_at)
+```
+
+### Validacion de que no existe otro tipo de elemento aparte de los necesarios en tipos de miembros
+
+```{r}
+contador_tipos <- clean_Total_data %>%
+  group_by(member_casual) %>%
+  summarize(contador = n())
+```
+
+### Validacion de que no existe otro tipo de elemento aparte de los necesarios en Tipos de bike
+
+```{r}
+contador_tipos2 <- clean_Total_data %>%
+  group_by(rideable_type) %>%
+  summarize(contador = n())
+```
+
+### Separacion de dia mes y año en diferentes columnas
+
+```{r}
+clean_Total_data$dia <- day(clean_Total_data$started_at)
+clean_Total_data$mes <- month(clean_Total_data$started_at)
+clean_Total_data$anio <- year(clean_Total_data$started_at)
+```
+
+## Analisis
+
+### Dia con mas viajes realizados
+
+```{r}
+filter_Dia_mas_usado<- clean_Total_data %>%
+  group_by(dia_numero,member_casual) %>%
+  summarise(count=n()) %>% 
+  na.omit()
+View(filter_Dia_mas_usado)
+```
+
+### cantidad de viajes en total
+
+```{r}
+filter_cantidad_total<- clean_Total_data %>%
+  group_by(member_casual) %>%
+  summarise(count=n())
+```
+
+### Filtrar y agrupar los datos por tipo de bicicleta y tipo de usuario
+
+```{r}
+viajes_por_bicicleta_y_usuario <- clean_Total_data %>%
+  group_by(rideable_type, member_casual) %>%
+  summarize(cantidad_viajes = n())
+```
+
+### Filtrar los valores negativos
+
+```{r}
+clean_Total_data <- clean_Total_data %>%
+  mutate(tiempo_de_uso = as.numeric(sub(" secs", "", tiempo_de_uso))) %>%
+  filter(tiempo_de_uso >= 300)
+```
+
+### Agrupar por tipo de usuario y calcular estadísticas Media,MIN,MAX, AVG
+
+```{r}
+estadisticas_viajes <- clean_Total_data %>%
+  group_by(member_casual) %>%
+  summarize(
+    media = mean(tiempo_de_uso),
+    maximo = max(tiempo_de_uso),
+    minimo = min(tiempo_de_uso),
+    promedio = median(tiempo_de_uso)
+  )
+```
+
+### Agrupar por tipo de usuario y calcular estadísticas Media,MIN,MAX, AVG ahora por cada dia de la semana
+
+```{r}
+estadisticas_viajes_dia <- clean_Total_data %>%
+  group_by(dia_numero,member_casual) %>%
+  summarize(
+    media = mean(tiempo_de_uso),
+    maximo = max(tiempo_de_uso),
+    minimo = min(tiempo_de_uso),
+    promedio = median(tiempo_de_uso)
+  )
+```
+
+### Hacer una comparacion entre dias de semana y fin de semana
+
+```{r}
+
+clean_Total_data$tipo_semana <- ifelse(clean_Total_data$dia_numero %in% c(6, 7), "fin_de_semana", "día_laborable")
+
+estadisticas_dia_tipo <- clean_Total_data %>%
+  group_by(tipo_semana,member_casual) %>%
+  summarize(
+    media = mean(tiempo_de_uso),
+    maximo = max(tiempo_de_uso),
+    minimo = min(tiempo_de_uso),
+    promedio = median(tiempo_de_uso)
+  )
+```
+
+### Tiempo de uso de cada mes diferenciado por tipo de miembro
+
+```{r}
+
+estadisticas_mes_tipo <- clean_Total_data %>%
+  group_by(mes, member_casual) %>%
+  summarize(
+    media = mean(tiempo_de_uso),
+    maximo = max(tiempo_de_uso),
+    minimo = min(tiempo_de_uso),
+    promedio = median(tiempo_de_uso)
+  )
+```
+
+### Filtrar los viajes que marcan distancia recorrida en 0 y que tengan tiempo mayor a 0
+
+```{r}
+viajes_recorrido_cero <- clean_Total_data %>%
+  filter(distancia_total == 0, tiempo_de_uso > 300) %>% 
+  group_by(member_casual) %>% 
+  summarize(
+    media = mean(tiempo_de_uso),
+    maximo = max(tiempo_de_uso),
+    minimo = min(tiempo_de_uso),
+    promedio = median(tiempo_de_uso)
+  )
+```
+
+### Cantidad de viajes realizados dependiendo del usuario cuando llegan al mimso destino
+
+```{r}
+viajes_recorrido_cero_tipo <- clean_Total_data %>%
+  filter(distancia_total == 0, tiempo_de_uso > 300) %>% 
+  group_by(member_casual) %>%  
+  summarize(cantidad_filas = n())  
+```
+
+### Viajes realizados por hora
+
+```{r}
+
+viajes_por_hora <- clean_Total_data %>%
+  mutate(hora = hour(started_at)) %>%  # Extraer la hora del inicio del viaje
+  group_by(hora, member_casual) %>%
+  summarize(cantidad_viajes = n())
+```
+
+## Visualizaciones
+
+## Crear un gráfico de barras apiladas para comparar el uso de bicicletas por tipo de usuario
+
+```{r}
+ggplot(data = viajes_por_bicicleta_y_usuario, aes(x = rideable_type, y = cantidad_viajes, fill = member_casual)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Uso de Bicicletas por Tipo de Usuario",
+       x = "Tipo de Bicicleta",
+       y = "Cantidad de Viajes",
+       fill = "Tipo de Usuario") +
+  theme_minimal()
+```
+
+# Comparacion de viajes recorridos cuando se llega al mismo destino de partida
+
+```{r}
+ggplot(data = viajes_recorrido_cero_tipo, aes(x = member_casual, y = cantidad_filas, fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Cantidad de Viajes con Recorrido en 0 por Tipo de Usuario",
+       x = "Tipo de Usuario",
+       y = "Cantidad de Viajes") +
+  theme_minimal()
+```
+
+### Comparacion de cantidad de viajes
+
+```{r}
+ggplot(data = filter_cantidad_total, aes(x = member_casual, y = count, fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Cantidad de Viajes en total por Tipo de Usuario",
+       x = "Tipo de Usuario",
+       y = "Cantidad de Viajes") +
+  theme_minimal()+ 
+  scale_y_continuous(labels = function(x) paste0(x/1e6, "M"))
+```
+
+### Calcular la cantidad de viajes por mes y tipo de usuario
+
+```{r}
+
+viajes_por_mes_tipo <- clean_Total_data %>%
+  mutate(mes = floor_date(started_at, unit = "month")) %>%
+  group_by(mes, member_casual) %>%
+  summarise(cantidad_viajes = n())
+```
+
+### Calcular la cantidad de viajes por mes y tipo de usuario
+
+```{r}
+viajes_por_mes_tipo <- clean_Total_data %>%
+  mutate(mes = floor_date(started_at, unit = "month")) %>%
+  group_by(mes, member_casual) %>%
+  summarise(cantidad_viajes = n())
+```
+
+#Grafico de comparacion de viajes por dia de semana
+
+```{r}
+ggplot(filter_Dia_mas_usado, aes(x = dia_numero, y = count, fill = member_casual)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Cantidad de Viajes por Día de la Semana y Tipo de Usuario",
+       x = "Día de la Semana",
+       y = "Cantidad de Viajes",
+       fill = "Tipo de Usuario") +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:7, labels = c( "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb","Dom"))+
+  scale_y_continuous(labels = function(x) paste0(x/1e6, "M"))
+```
+
+### Crear un gráfico de líneas Cantidad de Viajes por Mes y Tipo de Usuario
+
+```{r}
+ggplot(data = viajes_por_mes_tipo, aes(x = mes, y = cantidad_viajes, color = member_casual)) +
+  geom_line() +
+  labs(title = "Cantidad de Viajes por Mes y Tipo de Usuario",
+       x = "Mes",
+       y = "Cantidad de Viajes",
+       color = "Tipo de Usuario") +
+  theme_minimal()+ 
+  scale_y_continuous(labels = function(x) paste0(x/1e6, "M"))
+```
+
+### Gráfico de Dispersión: Duración vs. Distancia
+
+```{r}
+ggplot(clean_Total_data, aes(x = tiempo_de_uso, y = distancia_total)) +
+  geom_point() +
+  labs(title = "Gráfico de Dispersión: Duración vs. Distancia",
+       x = "Duración del Viaje (minutos)",
+       y = "Distancia Recorrida (km)") +
+  theme_minimal()
+```
+
+### Gráfico de caja Boxplot: Duración del Viaje
+
+```{r}
+ggplot(clean_Total_data, aes(x = 1, y = tiempo_de_uso)) +
+  geom_boxplot() +
+  labs(title = "Boxplot: Duración del Viaje",
+       x = "",
+       y = "Duración del Viaje (minutos)") +
+  theme_minimal() +
+  coord_flip()
+```
+
+### Crear un gráfico de barras para viajes por hora
+
+```{r}
+ggplot(data = viajes_por_hora, aes(x = hora, y = cantidad_viajes, fill = member_casual)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Cantidad de Viajes por Hora del Día",
+       x = "Hora del Día",
+       y = "Cantidad de Viajes",
+       fill = "Tipo de Usuario") +
+  theme_minimal()
+view(clean_Total_data)
+```
+
+# Exportacion de datos utilizados
+
+```{r}
+campos_utilizados <- clean_Total_data %>%
+  select(
+    ride_id, rideable_type, started_at, ended_at, member_casual,
+    distancia_total, tiempo_de_uso, dia_numero, dia, mes, anio
+  )
+ruta_salida <- "C:/Users/felip/OneDrive/Documentos/R/Cyclistic/Datos_Analizados.csv" 
+write_csv(campos_utilizados, ruta_salida)
+```
