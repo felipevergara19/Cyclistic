@@ -1,2 +1,2 @@
 # Cyclistic
-# theme: minima
+theme: minima
